@@ -5,7 +5,7 @@ from html import escape
 from crawler.models import CrawlResult
 
 def pages_csv(result: CrawlResult) -> str:
-    fields = ["url", "status_code", "title", "meta_description", "canonical", "robots", "depth", "incoming_links", "response_ms", "word_count", "error"]
+    fields = ["url", "status_code", "title", "meta_description", "canonical", "robots", "depth", "incoming_links", "response_ms", "word_count", "last_modified", "sitemap_lastmod", "error"]
     output = io.StringIO(); writer = csv.DictWriter(output, fieldnames=fields); writer.writeheader()
     for page in result.pages: writer.writerow({field: getattr(page, field) for field in fields})
     return output.getvalue()
@@ -17,7 +17,7 @@ def findings_csv(result: CrawlResult) -> str:
     return output.getvalue()
 
 def json_export(result: CrawlResult) -> str:
-    return json.dumps({"target_url": result.target_url, "started_at": result.started_at, "finished_at": result.finished_at, "settings": result.settings, "pages": [p.to_dict() for p in result.pages], "findings": [f.to_dict() for f in result.findings]}, indent=2)
+    return json.dumps({"target_url": result.target_url, "started_at": result.started_at, "finished_at": result.finished_at, "settings": result.settings, "pages": [p.to_dict() for p in result.pages], "findings": [f.to_dict() for f in result.findings], "external_links": result.external_links, "pagespeed": result.pagespeed}, indent=2)
 
 def html_report(result: CrawlResult) -> str:
     rows = "".join(f"<tr><td>{escape(f.severity)}</td><td>{escape(f.category)}</td><td>{escape(f.title)}</td><td>{escape(f.url)}</td><td>{escape(f.evidence)}</td><td>{escape(f.recommendation)}</td></tr>" for f in result.findings)

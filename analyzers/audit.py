@@ -1,6 +1,8 @@
 import hashlib
 import json
 from collections import defaultdict
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from urllib.parse import urljoin, urlsplit
 from crawler.models import CrawlResult, Finding
 
@@ -45,6 +47,23 @@ def audit(result: CrawlResult, settings: dict) -> list[Finding]:
                     findings.append(_finding("external-canonical", "Canonical points outside allowed domain", "High", "Indexability", page, canonical, "An unexpected canonical can consolidate signals away from this site.", "Verify the canonical target and keep it within the intended site domain."))
             except ValueError:
                 findings.append(_finding("invalid-canonical", "Invalid canonical URL", "High", "Indexability", page, page.canonical, "Invalid canonical values cannot reliably consolidate URL signals.", "Use an absolute or valid site-relative HTTP(S) canonical URL."))
+        for block in page.structured_data:
+            if not block.get("valid", True):
+                findings.append(_finding("invalid-jsonld", "Invalid JSON-LD", "Medium", "Structured Data", page, block.get("error", "JSON-LD could not be parsed."), "Malformed JSON-LD cannot be interpreted by crawlers or structured-data tools.", "Fix the JSON syntax and validate the block with a dedicated structured-data validator."))
+                continue
+            data = block.get("data")
+            objects = data if isinstance(data, list) else [data]
+            for item in objects:
+                if not isinstance(item, dict):
+                    findings.append(_finding("jsonld-shape", "Unsupported JSON-LD shape", "Low", "Structured Data", page, "A JSON-LD block did not contain an object.", "Structured-data consumers generally expect typed objects.", "Use a typed JSON-LD object or remove the unused block.", "Medium", False))
+                    continue
+                if not item.get("@context") or not item.get("@type"):
+                    findings.append(_finding("jsonld-required-fields", "JSON-LD is missing context or type", "Low", "Structured Data", page, f"@context={bool(item.get('@context'))}, @type={bool(item.get('@type'))}.", "Context and type are needed to interpret JSON-LD vocabulary.", "Add the appropriate @context and @type, then validate the markup."))
+                if item.get("@type") == "Person" and not item.get("name"):
+                    findings.append(_finding("person-schema-name", "Person JSON-LD is missing a name", "Medium", "Personal Brand", page, "A Person object has no name field.", "A person entity cannot be clearly identified without a name.", "Add the verified person's name if this markup is factually justified."))
+        jsonld_blocks = [json.dumps(block.get("data"), sort_keys=True) for block in page.structured_data if block.get("valid", True) and block.get("data") is not None]
+        if len(jsonld_blocks) != len(set(jsonld_blocks)):
+            findings.append(_finding("duplicate-jsonld", "Duplicate JSON-LD blocks", "Low", "Structured Data", page, f"Found {len(jsonld_blocks) - len(set(jsonld_blocks))} repeated JSON-LD block(s).", "Repeated structured-data blocks can create maintenance and interpretation ambiguity.", "Keep one authoritative block for each entity or intentionally distinct type."))
         if "noindex" in page.robots.lower() or "noindex" in page.x_robots_tag.lower():
             findings.append(_finding("noindex", "Page sends a noindex directive", "Medium", "Indexability", page, f"robots={page.robots!r}, X-Robots-Tag={page.x_robots_tag!r}", "This crawl evidence indicates the page requests exclusion, but does not prove Google index status.", "Confirm this directive is intentional for the page."))
         for image in page.images:
@@ -62,6 +81,16 @@ def audit(result: CrawlResult, settings: dict) -> list[Finding]:
             findings.append(_finding("thin-content", "Thin-content candidate", "Low", "Content", page, f"Only {page.word_count} visible words remained after boilerplate removal.", "Short utility pages can be valid; this is a review candidate, not an automatic quality judgment.", "Confirm the page serves a distinct user purpose and add useful detail if needed.", "Medium", False))
         if page.in_sitemap and page.status_code and page.status_code >= 400:
             findings.append(_finding("sitemap-error", "Sitemap URL returns an error", "High", "Indexability", page, f"Sitemap-listed URL returned HTTP {page.status_code}.", "Sitemaps should identify canonical, reachable URLs.", "Remove or repair the URL in the sitemap."))
+        if page.in_sitemap and page.sitemap_lastmod:
+            try:
+                sitemap_date = datetime.fromisoformat(page.sitemap_lastmod.replace("Z", "+00:00"))
+                if sitemap_date.tzinfo is None: sitemap_date = sitemap_date.replace(tzinfo=timezone.utc)
+                if page.last_modified:
+                    header_date = parsedate_to_datetime(page.last_modified)
+                    if abs((sitemap_date - header_date).total_seconds()) > 86400:
+                        findings.append(_finding("sitemap-lastmod-mismatch", "Sitemap lastmod differs from HTTP Last-Modified", "Low", "Indexability", page, f"sitemap={page.sitemap_lastmod}, HTTP Last-Modified={page.last_modified}", "Conflicting freshness signals reduce confidence in the published modification date.", "Update the sitemap or response header so the dates reflect the actual content change.", "High", True))
+            except (TypeError, ValueError, IndexError):
+                findings.append(_finding("invalid-lastmod", "Invalid sitemap lastmod", "Low", "Indexability", page, page.sitemap_lastmod, "Malformed lastmod values are not reliable freshness metadata.", "Use an ISO 8601 date or timestamp in the sitemap.", "High", True))
     for label, groups in (("title", title_groups), ("description", description_groups), ("H1", h1_groups), ("content", hash_groups)):
         for value, group in groups.items():
             if value and len(group) > 1:
@@ -75,6 +104,9 @@ def audit(result: CrawlResult, settings: dict) -> list[Finding]:
         if value and len(group) > 1:
             for page in group:
                 findings.append(_finding("duplicate-content", "Duplicate page content", "Medium", "Content", page, f"Exact normalized text hash shared by {len(group)} pages.", "Identical content across URLs can make the preferred URL unclear.", "Consolidate, differentiate, or canonicalize the duplicate pages."))
+    for link in result.external_links:
+        if link.get("error") or (link.get("status_code") and link["status_code"] >= 400):
+            findings.append(_finding("broken-external-link", "Broken external link", "Low", "Links", _page_for_url(result, link.get("source", "")), f"{link.get('url')} returned {link.get('status_code') or link.get('error')}.", "Broken outbound links can reduce trust and create a poor user experience.", "Update or remove the external link.", "High", True))
     brand = settings.get("brand_name", "Dipesh Sapkota").lower()
     home = next((p for p in pages if p.url == result.target_url), None)
     if home and brand not in (home.title + " " + home.meta_description + " " + " ".join(home.h1)).lower():
@@ -93,3 +125,6 @@ def normalize_canonical(value: str, base: str) -> str:
 def _stub(url):
     from crawler.models import PageRecord
     return PageRecord(url=url)
+
+def _page_for_url(result: CrawlResult, url: str):
+    return next((page for page in result.pages if page.url == url), _stub(url or result.target_url))

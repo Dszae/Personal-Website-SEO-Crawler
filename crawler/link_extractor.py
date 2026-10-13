@@ -1,3 +1,5 @@
+import json
+
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urldefrag
 
@@ -28,7 +30,11 @@ def parse_html(html: bytes, base_url: str, expected_host: str) -> dict:
             social[key.lower()] = node.get("content", "").strip()
     jsonld = []
     for node in soup.find_all("script", type="application/ld+json"):
-        jsonld.append({"raw": node.string or node.get_text()})
+        raw = node.string or node.get_text()
+        try:
+            jsonld.append({"raw": raw, "valid": True, "data": json.loads(raw)})
+        except (TypeError, json.JSONDecodeError) as exc:
+            jsonld.append({"raw": raw, "valid": False, "data": None, "error": str(exc)})
     for node in soup(["script", "style", "noscript", "nav", "footer"]): node.decompose()
     text = " ".join(soup.stripped_strings)
     return {"title": title, "description": description, "canonical": canonical, "robots": robots, "headings": headings, "h1": [h["text"] for h in headings if h["level"] == 1], "internal_links": internal, "external_links": external, "images": images, "social": social, "jsonld": jsonld, "text": text}

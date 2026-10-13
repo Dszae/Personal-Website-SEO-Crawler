@@ -14,6 +14,9 @@ from crawler.robots import load_robots
 from crawler.security import validate_public_url
 from crawler.sitemap import discover_sitemap
 from crawler.url_normalizer import normalize_url
+from crawler.render import render_page
+from services.external_links import check_external_links
+from services.pagespeed import run_pagespeed
 
 log = logging.getLogger(__name__)
 
@@ -78,12 +81,18 @@ class CrawlEngine:
                 page.content_type = response.headers.get("Content-Type", "")
                 page.response_ms = round((time.perf_counter() - started_request) * 1000, 2)
                 page.x_robots_tag = response.headers.get("X-Robots-Tag", "")
+                page.last_modified = response.headers.get("Last-Modified", "")
                 response.raw.decode_content = True
                 body = response.raw.read(int(self.settings.get("max_response_bytes", 3000000)) + 1)
+                if self.settings.get("render_javascript", False) and "html" in page.content_type.lower() and response.status_code < 400:
+                    body, rendered_url = render_page(page.final_url or url, self.settings)
+                    page.final_url = normalize_url(rendered_url)
                 page.response_bytes = len(body)
                 if len(body) > int(self.settings.get("max_response_bytes", 3000000)):
                     page.error = "Response exceeded configured size limit"
                 elif "html" in page.content_type.lower() and response.status_code < 400:
+                    if self.settings.get("retain_html", False):
+                        page.html_snapshot = body[:int(self.settings.get("max_snapshot_bytes", 500000))].decode("utf-8", errors="replace")
                     parsed = parse_html(body, page.final_url or url, urlsplit(root).hostname or "")
                     page.title = parsed["title"]; page.meta_description = parsed["description"]; page.canonical = parsed["canonical"]; page.robots = parsed["robots"]
                     page.headings = parsed["headings"]; page.h1 = parsed["h1"]; page.images = parsed["images"]; page.social = parsed["social"]; page.structured_data = parsed["jsonld"]
@@ -98,7 +107,7 @@ class CrawlEngine:
                     page.external_links = parsed["external_links"]
                 elif response.status_code >= 400:
                     page.error = f"HTTP {response.status_code}"
-            except (requests.RequestException, ValueError, OSError) as exc:
+            except (requests.RequestException, ValueError, RuntimeError, OSError) as exc:
                 page.error = str(exc)
                 result.errors.append(f"{url}: {exc}")
             result.pages.append(page)
@@ -107,5 +116,14 @@ class CrawlEngine:
         for page in result.pages:
             for link in page.internal_links: incoming[link["url"]] = incoming.get(link["url"], 0) + 1
         for page in result.pages: page.incoming_links = incoming.get(page.url, 0)
+        if self.settings.get("check_external_links", False):
+            result.external_links = check_external_links(result.pages, self.settings)
+        api_key = self.settings.get("pagespeed_api_key", "")
+        if api_key:
+            try:
+                result.pagespeed = run_pagespeed(root, api_key, float(self.settings.get("pagespeed_timeout", 30)))
+            except Exception as exc:
+                result.pagespeed = {"status": "error", "message": str(exc)}
+                result.errors.append(f"PageSpeed Insights: {exc}")
         result.finished_at = datetime.now(timezone.utc).isoformat()
         return result

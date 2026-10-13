@@ -10,23 +10,31 @@ A local Streamlit application that discovers pages from links and sitemaps, resp
 
 ## Features
 
-- Conservative crawler with configurable page/depth/request limits, delays, bounded request timeouts, response-size limits, redirect-chain recording, and descriptive user agent.
-- Public-destination protections: only configured domains are crawl targets; localhost, private, loopback, link-local, non-HTTP schemes, and disallowed redirects are rejected.
-- Sitemap and robots inspection, URL normalization, page metadata, headings, canonicals, indexability directives, images, social tags, JSON-LD capture, internal links, response timings, content hashes, and thin-content candidates.
-- Evidence-backed findings with severity, category, confidence, confirmation state, explanation, and fix recommendation.
-- Personal Brand & Entity Consistency checks using configured verified profile URLs.
-- SQLite scan history and recommendation status persistence (`Open`, `In progress`, `Fixed`, `Ignored`).
-- HTML, CSV, and JSON exports.
+- Optional isolated Playwright rendering with request-level destination checks and per-page HTML snapshots.
+- Optional bounded external-link status checks and PageSpeed Insights integration.
+- JSON-LD syntax/type checks and sitemap `lastmod` versus HTTP `Last-Modified` comparison.
+- Visual scan comparison with page-level metadata changes.
 - Pytest coverage for URL handling, security, parsing, analysis, persistence, exports, malformed sitemaps, and scan comparison.
 
 ## Supported systems
 
 Windows, macOS, and Linux with Python 3.11 or newer. This workspace was verified with Python 3.14.3.
 
+
+Optional browser rendering:
+
+```powershell
+pip install -e ".[browser]"
+python -m playwright install chromium
+```
+
+Enable **Render JavaScript with Playwright** from **Start Crawl**. The browser is headless, isolated per page, and every request is checked against the configured public domains. If Playwright or Chromium is unavailable, the scan records a clear error instead of silently claiming rendered coverage.
 ## Windows setup
 
-From PowerShell in the project folder:
 
+External checks are capped by `external_link_limit` and `external_timeout`. PageSpeed Insights is enabled only when `SEO_CRAWLER_PAGESPEED_API_KEY` is set; it reports the returned Lighthouse categories and available basic audit values, not a proprietary ranking score. HTML snapshots are opt-in with `retain_html` and bounded by `max_snapshot_bytes`.
+From PowerShell in the project folder:
+- External-link checks, PageSpeed, browser rendering, and snapshots are optional and disabled by default in the no-credential workflow.
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -73,9 +81,9 @@ Overview downloads page CSV, findings CSV, JSON, and a self-contained HTML repor
 
 ## Security and limitations
 
-Crawled HTML and XML are untrusted. Parsing is bounded and reports HTML-escape values. The crawler does not execute page JavaScript, bypass CAPTCHA or authentication, access `file://`/FTP, or crawl third-party domains deeply. The current dashboard records external links but does not yet run a separate external-link status pass. PageSpeed/Lighthouse integration is intentionally optional and not included in the basic no-credential workflow.
+Crawled HTML and XML are untrusted. Parsing is bounded and reports HTML-escape values. The crawler does not execute page JavaScript by default, bypass CAPTCHA or authentication, access `file://`/FTP, or crawl third-party domains deeply. Optional browser rendering, external-link checks, and PageSpeed are bounded and disabled by default in the no-credential workflow.
 
-The live portfolio returns compressed server-rendered HTML, which the fetcher decodes before parsing. JavaScript-only content that is absent from the HTTP response is not analyzed; `render_javascript` is documented for a future isolated Playwright extension rather than silently pretending it works.
+The live portfolio returns compressed server-rendered HTML, which the fetcher decodes before parsing. Without the optional browser mode, JavaScript-only content that is absent from the HTTP response is not analyzed. When browser mode is enabled, request-level destination checks still apply to every page and asset request.
 
 Do not use this tool to crawl sites you do not own or have permission to audit. Keep limits and delays conservative.
 
@@ -95,8 +103,6 @@ data/          local database and report output
 
 ## Future extension points
 
-- Isolated Playwright rendering with the same destination checks.
-- Bounded external-link checking.
-- PageSpeed Insights integration when an API key is configured.
-- Richer JSON-LD validation and sitemap last-modified comparison.
-- Visual scan comparison and per-page HTML inspection snapshots.
+- Deeper Lighthouse/PageSpeed history and trend visualization.
+- More schema-type-specific JSON-LD validation.
+- Optional visual screenshots for rendered page comparisons.

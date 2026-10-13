@@ -13,6 +13,7 @@ class PageRecord:
     canonical: str = ""
     robots: str = ""
     x_robots_tag: str = ""
+    last_modified: str = ""
     h1: list[str] = field(default_factory=list)
     headings: list[dict[str, Any]] = field(default_factory=list)
     internal_links: list[dict[str, str]] = field(default_factory=list)
@@ -31,6 +32,7 @@ class PageRecord:
     fetched: bool = False
     in_sitemap: bool = False
     sitemap_lastmod: str = ""
+    html_snapshot: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -64,3 +66,5 @@ class CrawlResult:
     sitemap_urls: list[str] = field(default_factory=list)
     robots_text: str = ""
     errors: list[str] = field(default_factory=list)
+    pagespeed: dict[str, Any] = field(default_factory=dict)
+    external_links: list[dict[str, Any]] = field(default_factory=list)

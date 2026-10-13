@@ -10,6 +10,14 @@ max_response_bytes: 3000000
 max_redirects: 5
 check_external_links: false
 render_javascript: false
+retain_html: false
+max_snapshot_bytes: 500000
+render_timeout: 20
+external_link_limit: 25
+external_timeout: 8
+external_max_redirects: 3
+pagespeed_api_key: ""
+pagespeed_timeout: 30
 check_sitemap: true
 respect_robots: true
 database: data/seo_crawler.sqlite3
