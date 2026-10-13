@@ -55,5 +55,3 @@ def test_pagespeed_quota_error_is_structured(monkeypatch):
     assert result["status"] == "error"
     assert result["http_status"] == 429
     assert "API key" in result["hint"]
-
-
