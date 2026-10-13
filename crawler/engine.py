@@ -17,6 +17,7 @@ from crawler.url_normalizer import normalize_url
 from crawler.render import render_page
 from services.external_links import check_external_links
 from services.pagespeed import run_pagespeed
+from services.local_performance import run_local_performance
 
 log = logging.getLogger(__name__)
 
@@ -122,6 +123,8 @@ class CrawlEngine:
         if self.settings.get("pagespeed_enabled", False) or api_key:
             try:
                 result.pagespeed = run_pagespeed(root, api_key, float(self.settings.get("pagespeed_timeout", 30)))
+                if result.pagespeed.get("status") == "error" and result.pagespeed.get("http_status") == 429 and not api_key and self.settings.get("pagespeed_local_fallback", True):
+                    result.pagespeed = run_local_performance(root, self.settings)
             except Exception as exc:
                 result.pagespeed = {"status": "error", "message": str(exc)}
                 result.errors.append(f"PageSpeed Insights: {exc}")
