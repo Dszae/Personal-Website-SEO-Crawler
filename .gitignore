@@ -1,0 +1,11 @@
+.venv/
+.env
+__pycache__/
+.pytest_cache/
+*.pyc
+__pycache__/
+data/*.db
+data/*.sqlite3
+data/reports/
+.streamlit/
+*.log

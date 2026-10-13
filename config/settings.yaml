@@ -1,0 +1,22 @@
+target_url: https://www.dipeshsapkota7.com.np/
+allowed_domains:
+  - www.dipeshsapkota7.com.np
+max_pages: 200
+max_depth: 5
+request_delay: 0.25
+concurrency: 3
+timeout: 15
+max_response_bytes: 3000000
+max_redirects: 5
+check_external_links: false
+render_javascript: false
+check_sitemap: true
+respect_robots: true
+database: data/seo_crawler.sqlite3
+output_dir: data/reports
+user_agent: PersonalWebsiteSEOCrawler/1.0 (+https://www.dipeshsapkota7.com.np/)
+brand_name: Dipesh Sapkota
+verified_profiles:
+  - https://linkedin.com/in/dsz.ae
+  - https://github.com/Dszae
+  - https://dev.to/dszae

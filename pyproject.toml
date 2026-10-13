@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "personal-website-seo-crawler"
+version = "0.1.0"
+description = "Evidence-based technical SEO crawler and Streamlit dashboard for websites you control."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+  "beautifulsoup4>=4.12,<5",
+  "lxml>=5.2,<7",
+  "requests>=2.32,<3",
+  "streamlit>=1.40,<2",
+  "pandas>=2.2,<4",
+  "plotly>=5.24,<7",
+  "PyYAML>=6.0,<7",
+  "python-dotenv>=1.0,<2",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.3,<9"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.setuptools]
+py-modules = ["app"]
