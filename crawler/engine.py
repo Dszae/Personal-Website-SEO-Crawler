@@ -119,7 +119,7 @@ class CrawlEngine:
         if self.settings.get("check_external_links", False):
             result.external_links = check_external_links(result.pages, self.settings)
         api_key = self.settings.get("pagespeed_api_key", "")
-        if api_key:
+        if self.settings.get("pagespeed_enabled", False) or api_key:
             try:
                 result.pagespeed = run_pagespeed(root, api_key, float(self.settings.get("pagespeed_timeout", 30)))
             except Exception as exc:

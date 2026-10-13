@@ -32,6 +32,26 @@ def test_comparison_reports_page_metadata_changes():
     assert comparison["page_changes"][0]["changes"]["title"] == {"before": "Old title", "after": "New title"}
 
 
-def test_pagespeed_requires_api_key():
+def test_pagespeed_parses_categories_without_api_key(monkeypatch):
+    class Response:
+        def raise_for_status(self): pass
+        def json(self): return {"lighthouseResult": {"categories": {"performance": {"score": 0.91}}, "audits": {"largest-contentful-paint": {"displayValue": "1.2 s"}}}}
+    monkeypatch.setattr("services.pagespeed.requests.get", lambda *args, **kwargs: Response())
     result = run_pagespeed("https://example.com/", "")
-    assert result["status"] == "not_configured"
+    assert result["status"] == "ok"
+    assert result["categories"]["performance"]["percent"] == 91
+    assert result["core_web_vitals"]["largest-contentful-paint"] == "1.2 s"
+
+
+def test_pagespeed_quota_error_is_structured(monkeypatch):
+    class Response:
+        status_code = 429
+        def raise_for_status(self):
+            import requests
+            raise requests.HTTPError("quota")
+        def json(self): return {"error": {"message": "Quota exceeded"}}
+    monkeypatch.setattr("services.pagespeed.requests.get", lambda *args, **kwargs: Response())
+    result = run_pagespeed("https://example.com/")
+    assert result["status"] == "error"
+    assert result["http_status"] == 429
+    assert "API key" in result["hint"]

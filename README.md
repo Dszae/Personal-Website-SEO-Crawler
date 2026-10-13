@@ -32,7 +32,7 @@ Enable **Render JavaScript with Playwright** from **Start Crawl**. The browser i
 ## Windows setup
 
 
-External checks are capped by `external_link_limit` and `external_timeout`. PageSpeed Insights is enabled only when `SEO_CRAWLER_PAGESPEED_API_KEY` is set; it reports the returned Lighthouse categories and available basic audit values, not a proprietary ranking score. HTML snapshots are opt-in with `retain_html` and bounded by `max_snapshot_bytes`.
+External checks are capped by `external_link_limit` and `external_timeout`. PageSpeed Insights can be enabled per scan without a key under Google's limited public quota, but an API key via `SEO_CRAWLER_PAGESPEED_API_KEY` is recommended for reliable quota. Quota and API failures are shown as structured scan results. It reports returned Lighthouse categories and available basic audit values, not a proprietary ranking score. HTML snapshots are opt-in with `retain_html` and bounded by `max_snapshot_bytes`.
 From PowerShell in the project folder:
 - External-link checks, PageSpeed, browser rendering, and snapshots are optional and disabled by default in the no-credential workflow.
 ```powershell

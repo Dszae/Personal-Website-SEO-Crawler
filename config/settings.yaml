@@ -17,6 +17,7 @@ external_link_limit: 25
 external_timeout: 8
 external_max_redirects: 3
 pagespeed_api_key: ""
+pagespeed_enabled: false
 pagespeed_timeout: 30
 check_sitemap: true
 respect_robots: true

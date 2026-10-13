@@ -43,10 +43,12 @@ if section == "Start Crawl":
     check_external = st.checkbox("Check external links", value=bool(settings["check_external_links"]), help="External links are checked only as bounded status checks and never become crawl targets.")
     render_javascript = st.checkbox("Render JavaScript with Playwright", value=bool(settings["render_javascript"]), help="Optional. Install Playwright and Chromium first. Every browser request is restricted to configured public domains.")
     retain_html = st.checkbox("Retain HTML inspection snapshots", value=bool(settings["retain_html"]), help="Snapshots are disabled by default and stored in SQLite when enabled.")
+    pagespeed_enabled = st.checkbox("Run PageSpeed Insights", value=bool(settings.get("pagespeed_enabled", False)), help="Uses Google's quota-limited public endpoint without a key, or your configured key when supplied.")
+    pagespeed_key = st.text_input("PageSpeed API key (optional)", value="", type="password", help="Used only for this scan. Prefer SEO_CRAWLER_PAGESPEED_API_KEY in .env for repeated scans.")
     if st.button("Start crawl", type="primary"):
         if not target.startswith(("https://", "http://")): st.error("Enter an absolute HTTP(S) URL.")
         else:
-            run_settings = {**settings, "target_url": target, "allowed_domains": [x.strip().lower() for x in allowed_text.split(",") if x.strip()], "max_pages": max_pages, "max_depth": max_depth, "request_delay": delay, "check_external_links": check_external, "render_javascript": render_javascript, "retain_html": retain_html}
+            run_settings = {**settings, "target_url": target, "allowed_domains": [x.strip().lower() for x in allowed_text.split(",") if x.strip()], "max_pages": max_pages, "max_depth": max_depth, "request_delay": delay, "check_external_links": check_external, "render_javascript": render_javascript, "retain_html": retain_html, "pagespeed_enabled": pagespeed_enabled, "pagespeed_api_key": pagespeed_key or settings.get("pagespeed_api_key", "")}
             with st.spinner("Crawling public pages and analyzing evidence..."):
                 result = CrawlEngine(run_settings).crawl(); result.findings = audit(result, run_settings); scan_id = db.save_scan(result)
             st.session_state.result = result; st.session_state.scan_id = scan_id; st.success(f"Scan {scan_id} completed with {len(result.pages)} page records and {len(result.findings)} findings.")
