@@ -124,7 +124,14 @@ def audit(result: CrawlResult, settings: dict) -> list[Finding]:
     about = [p for p in pages if "/about" in p.url]
     if not about:
         findings.append(_finding("about-discoverability", "About page not discovered", "Low", "Personal Brand", result.pages[0] if result.pages else _stub(result.target_url), "No URL containing /about was discovered.", "An about page can provide context for a personal portfolio.", "Add or link an about page if it is part of the intended site structure.", "Medium", False))
-    return sorted(findings, key=lambda f: (-f.score, f.category, f.url))
+    # The same issue repeated on one page (a logo without alt in the header and
+    # the footer, one broken link in two menus) yields the same stable_id. Keep
+    # one: the id is the findings table's primary key, and a repeat made the
+    # whole scan fail to save.
+    unique = {}
+    for finding in findings:
+        unique.setdefault(finding.stable_id, finding)
+    return sorted(unique.values(), key=lambda f: (-f.score, f.category, f.url))
 
 def normalize_canonical(value: str, base: str) -> str:
     candidate = urljoin(base, value)
