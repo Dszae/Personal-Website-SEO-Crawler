@@ -1,7 +1,8 @@
 import hashlib
 import json
+import re
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from urllib.parse import urljoin, urlsplit
 from crawler.models import CrawlResult, Finding
@@ -20,6 +21,31 @@ def _home_url(target_url: str) -> str:
         return normalize_url(target_url)
     except ValueError:
         return target_url
+
+def _lastmod_window(value: str) -> tuple[datetime, datetime]:
+    """The span a sitemap lastmod covers. sitemaps.org uses W3C Datetime, which
+    may stop at the year ("2026") or the month ("2026-01"); those cover the
+    whole year or month, a full date or timestamp covers one instant.
+    Raises ValueError for a value that is not a W3C Datetime."""
+    value = value.strip()
+    if re.fullmatch(r"\d{4}", value):
+        start = datetime(int(value), 1, 1, tzinfo=timezone.utc)
+        return start, start.replace(year=start.year + 1)
+    if re.fullmatch(r"\d{4}-\d{2}", value):
+        year, month = map(int, value.split("-"))
+        start = datetime(year, month, 1, tzinfo=timezone.utc)
+        return start, start.replace(year=year + 1, month=1) if month == 12 else start.replace(month=month + 1)
+    moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if moment.tzinfo is None: moment = moment.replace(tzinfo=timezone.utc)
+    return moment, moment
+
+def _http_date(value: str) -> datetime | None:
+    try:
+        parsed = parsedate_to_datetime(value)
+    except (TypeError, ValueError, IndexError):
+        return None
+    # "-0000" parses as naive; HTTP dates are always UTC (RFC 9110).
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 def audit(result: CrawlResult, settings: dict) -> list[Finding]:
     findings = []
@@ -93,14 +119,16 @@ def audit(result: CrawlResult, settings: dict) -> list[Finding]:
             findings.append(_finding("sitemap-error", "Sitemap URL returns an error", "High", "Indexability", page, f"Sitemap-listed URL returned HTTP {page.status_code}.", "Sitemaps should identify canonical, reachable URLs.", "Remove or repair the URL in the sitemap."))
         if page.in_sitemap and page.sitemap_lastmod:
             try:
-                sitemap_date = datetime.fromisoformat(page.sitemap_lastmod.replace("Z", "+00:00"))
-                if sitemap_date.tzinfo is None: sitemap_date = sitemap_date.replace(tzinfo=timezone.utc)
-                if page.last_modified:
-                    header_date = parsedate_to_datetime(page.last_modified)
-                    if abs((sitemap_date - header_date).total_seconds()) > 86400:
-                        findings.append(_finding("sitemap-lastmod-mismatch", "Sitemap lastmod differs from HTTP Last-Modified", "Low", "Indexability", page, f"sitemap={page.sitemap_lastmod}, HTTP Last-Modified={page.last_modified}", "Conflicting freshness signals reduce confidence in the published modification date.", "Update the sitemap or response header so the dates reflect the actual content change.", "High", True))
-            except (TypeError, ValueError, IndexError):
+                window_start, window_end = _lastmod_window(page.sitemap_lastmod)
+            except ValueError:
                 findings.append(_finding("invalid-lastmod", "Invalid sitemap lastmod", "Low", "Indexability", page, page.sitemap_lastmod, "Malformed lastmod values are not reliable freshness metadata.", "Use an ISO 8601 date or timestamp in the sitemap.", "High", True))
+            else:
+                # A malformed Last-Modified header is the server's problem, not
+                # the sitemap's, so it only skips the comparison.
+                header_date = _http_date(page.last_modified) if page.last_modified else None
+                tolerance = timedelta(days=1)
+                if header_date and not window_start - tolerance <= header_date <= window_end + tolerance:
+                    findings.append(_finding("sitemap-lastmod-mismatch", "Sitemap lastmod differs from HTTP Last-Modified", "Low", "Indexability", page, f"sitemap={page.sitemap_lastmod}, HTTP Last-Modified={page.last_modified}", "Conflicting freshness signals reduce confidence in the published modification date.", "Update the sitemap or response header so the dates reflect the actual content change.", "High", True))
     for label, groups in (("title", title_groups), ("description", description_groups), ("H1", h1_groups), ("content", hash_groups)):
         for value, group in groups.items():
             if value and len(group) > 1:
