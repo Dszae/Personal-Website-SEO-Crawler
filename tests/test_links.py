@@ -20,6 +20,13 @@ def test_links_are_classified_by_host_not_port_or_userinfo():
     assert [link['anchor'] for link in data['internal_links']] == ['About', 'Blog', 'Contact', 'Login', 'Docs']
     assert [link['anchor'] for link in data['external_links']] == ['Other', 'Lookalike']
 
+def test_canonical_rel_is_matched_case_insensitively():
+    for rel in (b'canonical', b'Canonical', b'CANONICAL'):
+        html = b'<link rel="' + rel + b'" href="https://example.com/x">'
+        assert parse_html(html, 'https://example.com/', 'example.com')['canonical'] == 'https://example.com/x', rel
+    # A different relation that merely contains the word is not canonical.
+    assert parse_html(b'<link rel="noncanonical" href="https://example.com/y">', 'https://example.com/', 'example.com')['canonical'] == ''
+
 def test_jsonld_is_found_whatever_the_type_spelling():
     html = (
         b'<script type="application/ld+json">{"@type": "Person", "name": "A"}</script>'

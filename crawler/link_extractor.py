@@ -28,7 +28,8 @@ def parse_html(html: bytes, base_url: str, expected_host: str) -> dict:
     description = ""
     meta = soup.find("meta", attrs={"name": lambda v: v and v.lower() == "description"})
     if meta: description = (meta.get("content") or "").strip()
-    canonical_nodes = soup.find_all("link", rel=lambda value: value and "canonical" in value)
+    # rel values are case-insensitive keywords: rel="Canonical" is a canonical link.
+    canonical_nodes = soup.find_all("link", rel=lambda value: bool(value) and "canonical" in str(value).lower().split())
     canonical = (canonical_nodes[0].get("href") or "").strip() if canonical_nodes else ""
     robots_node = soup.find("meta", attrs={"name": lambda v: v and v.lower() == "robots"})
     robots = (robots_node.get("content") or "").strip() if robots_node else ""
