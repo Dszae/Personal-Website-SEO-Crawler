@@ -29,3 +29,30 @@ def test_homepage_is_recognized_when_target_url_has_no_trailing_slash():
     assert "Thin-content candidate" not in home_findings
     # The brand check runs only once the homepage is found.
     assert "Homepage identity is not explicit" in home_findings
+
+import pytest
+
+def _lastmod_findings(sitemap_lastmod, last_modified=""):
+    page = PageRecord(url="https://example.com/", fetched=True, title="Example home page", h1=["Example"], word_count=200, in_sitemap=True, sitemap_lastmod=sitemap_lastmod, last_modified=last_modified)
+    findings = audit(CrawlResult(page.url, "", pages=[page]), {"allowed_domains": ["example.com"], "brand_name": "Example"})
+    return {f.title for f in findings if "lastmod" in f.title.lower()}
+
+@pytest.mark.parametrize("lastmod", ["2026", "2026-01", "2026-01-02", "2026-01-02T10:00+05:45"])
+def test_w3c_datetime_lastmod_forms_are_valid(lastmod):
+    # sitemaps.org: lastmod is a W3C Datetime, which may stop at the year or month.
+    assert _lastmod_findings(lastmod) == set()
+
+def test_an_impossible_lastmod_is_still_invalid():
+    assert _lastmod_findings("2026-13") == {"Invalid sitemap lastmod"}
+
+def test_a_month_lastmod_is_compared_at_month_precision():
+    assert _lastmod_findings("2026-01", "Thu, 15 Jan 2026 12:00:00 GMT") == set()
+    assert _lastmod_findings("2026-01", "Mon, 16 Mar 2026 12:00:00 GMT") == {"Sitemap lastmod differs from HTTP Last-Modified"}
+
+def test_a_bad_last_modified_header_does_not_blame_the_sitemap():
+    assert _lastmod_findings("2026-01-02", "not a date") == set()
+
+def test_a_minus_zero_zone_last_modified_header_is_compared():
+    # RFC 5322's "-0000" yields a naive datetime; HTTP dates are always UTC.
+    assert _lastmod_findings("2026-01-02", "Fri, 02 Jan 2026 08:00:00 -0000") == set()
+    assert _lastmod_findings("2026-01-02", "Fri, 20 Feb 2026 08:00:00 -0000") == {"Sitemap lastmod differs from HTTP Last-Modified"}
