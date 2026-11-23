@@ -67,3 +67,21 @@ def test_invalid_sitemap_is_reported(monkeypatch):
     entries, errors = discover_sitemap("https://example.com/", "", 1, "test")
     assert entries == []
     assert errors
+
+import pytest
+
+@pytest.mark.parametrize("namespace", [
+    "http://www.sitemaps.org/schemas/sitemap/0.9",
+    "https://www.sitemaps.org/schemas/sitemap/0.9",  # a common typo of the standard one
+    "http://www.google.com/schemas/sitemap/0.84",  # the pre-standard Google namespace
+    None,
+])
+def test_sitemaps_are_read_whatever_their_namespace(monkeypatch, namespace):
+    xmlns = f' xmlns="{namespace}"' if namespace else ""
+    _serve(monkeypatch, {
+        "https://example.com/sitemap.xml": f"<sitemapindex{xmlns}><sitemap><loc> https://example.com/pages.xml </loc></sitemap></sitemapindex>".encode(),
+        "https://example.com/pages.xml": f"<urlset{xmlns}><url><loc>https://example.com/about</loc><lastmod>2026-01-02</lastmod></url></urlset>".encode(),
+    })
+    entries, errors = discover_sitemap("https://example.com/", "", 1, "test")
+    assert entries == [{"url": "https://example.com/about", "lastmod": "2026-01-02"}]
+    assert errors == []

@@ -2,7 +2,19 @@ from urllib.parse import urljoin
 from xml.etree import ElementTree
 import requests
 
-NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+def _local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+def _children(node, name: str) -> list:
+    # Elements are matched by local name, whatever their namespace: real
+    # sitemaps also use https://www.sitemaps.org/..., Google's pre-standard
+    # 0.84 namespace, or none, and a namespace-bound lookup finds nothing in
+    # those, silently.
+    return [child for child in node if _local_name(child.tag) == name]
+
+def _child_text(node, name: str) -> str:
+    found = _children(node, name)
+    return (found[0].text or "").strip() if found else ""
 
 def discover_sitemap(root_url: str, robots_text: str, timeout: float, user_agent: str) -> tuple[list[dict[str, str]], list[str]]:
     candidates = []
@@ -31,14 +43,14 @@ def _read_sitemap(sitemap_url: str, timeout: float, user_agent: str, seen: set[s
     except (requests.RequestException, ElementTree.ParseError) as exc:
         errors.append(f"Sitemap {sitemap_url}: {exc}")
         return
-    tag = root.tag.rsplit("}", 1)[-1]
+    tag = _local_name(root.tag)
     if tag == "sitemapindex":
-        for node in root.findall("sm:sitemap/sm:loc", NS):
-            _read_sitemap((node.text or "").strip(), timeout, user_agent, seen, entries, errors)
+        for node in _children(root, "sitemap"):
+            _read_sitemap(_child_text(node, "loc"), timeout, user_agent, seen, entries, errors)
     elif tag == "urlset":
-        for node in root.findall("sm:url", NS):
-            loc = node.findtext("sm:loc", default="", namespaces=NS).strip()
-            lastmod = node.findtext("sm:lastmod", default="", namespaces=NS).strip()
+        for node in _children(root, "url"):
+            loc = _child_text(node, "loc")
+            lastmod = _child_text(node, "lastmod")
             if loc:
                 entries.append({"url": loc, "lastmod": lastmod})
     else:
