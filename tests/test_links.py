@@ -19,3 +19,13 @@ def test_links_are_classified_by_host_not_port_or_userinfo():
     data = parse_html(html, 'https://example.com:8443/', 'example.com')
     assert [link['anchor'] for link in data['internal_links']] == ['About', 'Blog', 'Contact', 'Login', 'Docs']
     assert [link['anchor'] for link in data['external_links']] == ['Other', 'Lookalike']
+
+def test_relative_urls_resolve_against_the_base_element():
+    # <base href> sets the base URL for every relative link and image (HTML spec).
+    html = b'<html><head><base href="/docs/"></head><body><a href="intro">Intro</a><img src="diagram.png" alt="Diagram"></body></html>'
+    data = parse_html(html, 'https://example.com/', 'example.com')
+    assert data['internal_links'][0]['url'] == 'https://example.com/docs/intro'
+    assert data['images'][0]['url'] == 'https://example.com/docs/diagram.png'
+    # A base that is not HTTP(S) is ignored, as browsers ignore it.
+    data = parse_html(b'<base href="javascript:void(0)"><a href="/about">About</a>', 'https://example.com/', 'example.com')
+    assert data['internal_links'][0]['url'] == 'https://example.com/about'

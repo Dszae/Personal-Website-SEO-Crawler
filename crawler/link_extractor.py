@@ -8,6 +8,11 @@ def _host(value: str) -> str:
 
 def parse_html(html: bytes, base_url: str, expected_host: str) -> dict:
     soup = BeautifulSoup(html, "lxml")
+    # The first <base href> sets the base URL for relative links and images.
+    base_node = soup.find("base", href=True)
+    if base_node:
+        declared_base = urljoin(base_url, base_node["href"].strip())
+        if declared_base.startswith(("http://", "https://")): base_url = declared_base
     title = soup.title.get_text(" ", strip=True) if soup.title else ""
     description = ""
     meta = soup.find("meta", attrs={"name": lambda v: v and v.lower() == "description"})
