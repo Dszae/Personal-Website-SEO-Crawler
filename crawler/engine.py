@@ -37,6 +37,8 @@ class CrawlEngine:
             chain.append(current)
             if response.is_redirect or response.is_permanent_redirect:
                 location = response.headers.get("Location")
+                # A streamed response holds its connection until it is closed.
+                response.close()
                 if not location: break
                 from urllib.parse import urljoin
                 current = urljoin(current, location)
@@ -74,6 +76,7 @@ class CrawlEngine:
             seen.add(url)
             page = PageRecord(url=url, requested_url=url, depth=depth, in_sitemap=url in sitemap_by_url, sitemap_lastmod=sitemap_by_url.get(url, ""))
             started_request = time.perf_counter()
+            response = None
             try:
                 response, chain = self._request(url)
                 page.redirect_chain = chain
@@ -111,6 +114,10 @@ class CrawlEngine:
             except (requests.RequestException, ValueError, RuntimeError, OSError) as exc:
                 page.error = str(exc)
                 result.errors.append(f"{url}: {exc}")
+            finally:
+                # The body is read with stream=True, often only up to the size
+                # limit; closing hands the connection back to the session pool.
+                if response is not None: response.close()
             result.pages.append(page)
             if self.settings.get("request_delay", 0): time.sleep(float(self.settings["request_delay"]))
         incoming = {}

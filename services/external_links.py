@@ -32,7 +32,11 @@ def check_external_links(pages: list, settings: dict) -> list[dict]:
                 validate_public_destination(current)
                 response = session.head(current, allow_redirects=False, timeout=timeout)
                 if response.status_code in {405, 501}:
+                    response.close()
                     response = session.get(current, allow_redirects=False, stream=True, timeout=timeout)
+                # Only the status and headers are needed; closing the streamed
+                # GET releases its connection without downloading the body.
+                response.close()
                 status = response.status_code
                 chain.append(current)
                 if response.is_redirect or response.is_permanent_redirect:
