@@ -19,8 +19,12 @@ def _child_text(node, name: str) -> str:
 def discover_sitemap(root_url: str, robots_text: str, timeout: float, user_agent: str) -> tuple[list[dict[str, str]], list[str]]:
     candidates = []
     for line in robots_text.splitlines():
-        if line.lower().startswith("sitemap:"):
-            candidates.append(line.split(":", 1)[1].strip())
+        # robots.txt allows a "#" comment on any line and spacing around the
+        # field name and colon; a relative value is resolved against the site.
+        field, separator, value = line.split("#", 1)[0].partition(":")
+        value = value.strip()
+        if separator and field.strip().lower() == "sitemap" and value:
+            candidates.append(urljoin(root_url, value))
     if not candidates:
         candidates.append(urljoin(root_url, "/sitemap.xml"))
     entries: list[dict[str, str]] = []

@@ -85,3 +85,25 @@ def test_sitemaps_are_read_whatever_their_namespace(monkeypatch, namespace):
     entries, errors = discover_sitemap("https://example.com/", "", 1, "test")
     assert entries == [{"url": "https://example.com/about", "lastmod": "2026-01-02"}]
     assert errors == []
+
+def test_robots_sitemap_lines_allow_comments_spacing_and_relative_urls(monkeypatch):
+    fetched = _serve(monkeypatch, {
+        "https://example.com/a.xml": _urlset("https://example.com/one"),
+        "https://example.com/b.xml": _urlset("https://example.com/two"),
+    })
+    robots = "\n".join([
+        "User-agent: *",
+        "  Sitemap: https://example.com/a.xml  # main sitemap",
+        "sitemap : /b.xml",
+        "# Sitemap: https://example.com/commented-out.xml",
+    ])
+    entries, errors = discover_sitemap("https://example.com/", robots, 1, "test")
+    assert [entry["url"] for entry in entries] == ["https://example.com/one", "https://example.com/two"]
+    assert errors == []
+    assert fetched == ["https://example.com/a.xml", "https://example.com/b.xml"]
+
+def test_an_empty_sitemap_line_keeps_the_default_location(monkeypatch):
+    fetched = _serve(monkeypatch, {"https://example.com/sitemap.xml": _urlset("https://example.com/")})
+    entries, errors = discover_sitemap("https://example.com/", "Sitemap:\n", 1, "test")
+    assert [entry["url"] for entry in entries] == ["https://example.com/"]
+    assert fetched == ["https://example.com/sitemap.xml"]
