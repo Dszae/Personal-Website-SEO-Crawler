@@ -59,7 +59,9 @@ if section != "Start Crawl" and not result:
 elif section == "Overview" and result:
     st.header("Overview"); summary_metrics(result)
     st.subheader("Fix First")
-    st.dataframe(pd.DataFrame([f.to_dict() for f in result.findings[:10]])[["severity", "category", "title", "url", "evidence"]], width="stretch", hide_index=True, alt="Highest-priority SEO findings")
+    # Name the columns up front: selecting them from a frame built from no
+    # findings raised KeyError, so a scan with nothing to fix crashed the page.
+    st.dataframe(pd.DataFrame([f.to_dict() for f in result.findings[:10]], columns=["severity", "category", "title", "url", "evidence"]), width="stretch", hide_index=True, alt="Highest-priority SEO findings")
     if result.pagespeed:
         st.subheader("PageSpeed Insights")
         st.json(result.pagespeed)
