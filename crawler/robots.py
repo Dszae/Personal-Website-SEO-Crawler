@@ -6,7 +6,11 @@ def load_robots(root_url: str, user_agent: str, timeout: float) -> tuple[RobotFi
     robots_url = urljoin(root_url, "/robots.txt")
     try:
         response = requests.get(robots_url, headers={"User-Agent": user_agent}, timeout=timeout)
-        text = response.text if response.status_code < 500 else ""
+        # Only a successful response is a robots.txt. A 4xx body is an error
+        # page (usually HTML): read as rules it could block paths, show up as
+        # the site's robots.txt, and add bogus "Sitemap:" candidates that
+        # suppress the /sitemap.xml fallback. No file means no restrictions.
+        text = response.text if response.ok else ""
         parser = RobotFileParser()
         parser.set_url(robots_url)
         parser.parse(text.splitlines())
