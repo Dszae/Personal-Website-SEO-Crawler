@@ -20,6 +20,24 @@ def test_links_are_classified_by_host_not_port_or_userinfo():
     assert [link['anchor'] for link in data['internal_links']] == ['About', 'Blog', 'Contact', 'Login', 'Docs']
     assert [link['anchor'] for link in data['external_links']] == ['Other', 'Lookalike']
 
+def test_lazy_loaded_images_report_their_own_url():
+    # Lazy-loading markup leaves src empty; the image is in data-src or srcset.
+    html = (
+        b'<img data-src="/hero.jpg" alt="">'
+        b'<img srcset="/card.jpg 1x, /card@2x.jpg 2x" alt="Card">'
+        b'<img data-srcset="/thumb.webp 320w, /thumb-lg.webp 640w">'
+        b'<img src="/plain.png" data-src="/ignored.png">'
+        b'<img alt="no source at all">'
+    )
+    data = parse_html(html, 'https://example.com/page', 'example.com')
+    assert [image['url'] for image in data['images']] == [
+        'https://example.com/hero.jpg',
+        'https://example.com/card.jpg',
+        'https://example.com/thumb.webp',
+        'https://example.com/plain.png',
+        '',
+    ]
+
 def test_relative_urls_resolve_against_the_base_element():
     # <base href> sets the base URL for every relative link and image (HTML spec).
     html = b'<html><head><base href="/docs/"></head><body><a href="intro">Intro</a><img src="diagram.png" alt="Diagram"></body></html>'

@@ -6,6 +6,17 @@ from urllib.parse import urljoin, urldefrag, urlsplit
 def _host(value: str) -> str:
     return value.lower().rstrip(".")
 
+def _image_source(node) -> str:
+    # Lazy-loading markup leaves src empty and keeps the image in data-src or
+    # a srcset; an empty src would otherwise resolve to the page's own URL.
+    for attribute in ("src", "data-src", "data-lazy-src"):
+        value = (node.get(attribute) or "").strip()
+        if value: return value
+    for attribute in ("srcset", "data-srcset"):
+        candidates = (node.get(attribute) or "").strip()
+        if candidates: return candidates.split(",")[0].split()[0]
+    return ""
+
 def parse_html(html: bytes, base_url: str, expected_host: str) -> dict:
     soup = BeautifulSoup(html, "lxml")
     # The first <base href> sets the base URL for relative links and images.
@@ -33,7 +44,8 @@ def parse_html(html: bytes, base_url: str, expected_host: str) -> dict:
         (internal if _host(urlsplit(href).hostname or "") == site_host else external).append(item)
     images = []
     for node in soup.find_all("img"):
-        images.append({"url": urljoin(base_url, node.get("src", "")), "alt": node.get("alt"), "width": node.get("width"), "height": node.get("height")})
+        source = _image_source(node)
+        images.append({"url": urljoin(base_url, source) if source else "", "alt": node.get("alt"), "width": node.get("width"), "height": node.get("height")})
     social = {}
     for node in soup.find_all("meta"):
         key = node.get("property") or node.get("name")
