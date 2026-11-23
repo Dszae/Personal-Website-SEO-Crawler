@@ -75,8 +75,12 @@ elif section == "Page Explorer" and result:
     st.header("Page Explorer")
     query = st.text_input("Filter URLs or titles")
     frame = pd.DataFrame([p.to_dict() for p in result.pages]);
-    if not frame.empty:
-        if query: frame = frame[frame.apply(lambda row: query.lower() in str(row).lower(), axis=1)]
+    # Search the full values: str(row) is pandas' abbreviated printout, which
+    # cuts long titles and descriptions, so words near their end never matched.
+    if query and not frame.empty: frame = frame[frame.apply(lambda row: query.lower() in " ".join(str(value) for value in row.values).lower(), axis=1)]
+    if frame.empty:
+        st.info("No pages match this filter." if query else "This scan has no page records.")
+    else:
         cols = ["url", "status_code", "title", "meta_description", "canonical", "robots", "incoming_links", "depth", "response_ms", "error"]
         st.dataframe(frame[cols], width="stretch", hide_index=True, alt="Crawled page explorer")
         selected_url = st.selectbox("Inspect page", frame["url"].tolist())
