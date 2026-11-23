@@ -4,16 +4,27 @@ import json
 from html import escape
 from crawler.models import CrawlResult
 
+# Spreadsheet apps run a cell that starts with one of these as a formula.
+FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+def _cell(value):
+    # Titles, descriptions, canonicals and evidence come from crawled pages,
+    # so text that would start a formula is prefixed with "'" (CSV injection,
+    # CWE-1236). Numbers are left as they are.
+    if isinstance(value, str) and value.startswith(FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
 def pages_csv(result: CrawlResult) -> str:
     fields = ["url", "status_code", "title", "meta_description", "canonical", "robots", "depth", "incoming_links", "response_ms", "word_count", "last_modified", "sitemap_lastmod", "error"]
     output = io.StringIO(); writer = csv.DictWriter(output, fieldnames=fields); writer.writeheader()
-    for page in result.pages: writer.writerow({field: getattr(page, field) for field in fields})
+    for page in result.pages: writer.writerow({field: _cell(getattr(page, field)) for field in fields})
     return output.getvalue()
 
 def findings_csv(result: CrawlResult) -> str:
     fields = ["stable_id", "title", "severity", "category", "url", "evidence", "why_it_matters", "recommendation", "confidence", "confirmed", "status"]
     output = io.StringIO(); writer = csv.DictWriter(output, fieldnames=fields); writer.writeheader()
-    for finding in result.findings: writer.writerow({field: getattr(finding, field) for field in fields})
+    for finding in result.findings: writer.writerow({field: _cell(getattr(finding, field)) for field in fields})
     return output.getvalue()
 
 def json_export(result: CrawlResult) -> str:
