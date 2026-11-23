@@ -52,7 +52,9 @@ def parse_html(html: bytes, base_url: str, expected_host: str) -> dict:
         if key and (key.lower().startswith("og:") or key.lower().startswith("twitter:")):
             social[key.lower()] = node.get("content", "").strip()
     jsonld = []
-    for node in soup.find_all("script", type="application/ld+json"):
+    # MIME types are case-insensitive and may carry parameters
+    # ("application/ld+json; charset=utf-8").
+    for node in soup.find_all("script", type=lambda value: bool(value) and value.split(";")[0].strip().lower() == "application/ld+json"):
         raw = node.string or node.get_text()
         try:
             jsonld.append({"raw": raw, "valid": True, "data": json.loads(raw)})

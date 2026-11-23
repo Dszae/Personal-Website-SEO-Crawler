@@ -20,6 +20,16 @@ def test_links_are_classified_by_host_not_port_or_userinfo():
     assert [link['anchor'] for link in data['internal_links']] == ['About', 'Blog', 'Contact', 'Login', 'Docs']
     assert [link['anchor'] for link in data['external_links']] == ['Other', 'Lookalike']
 
+def test_jsonld_is_found_whatever_the_type_spelling():
+    html = (
+        b'<script type="application/ld+json">{"@type": "Person", "name": "A"}</script>'
+        b'<script type="application/ld+json; charset=utf-8">{"@type": "WebSite"}</script>'
+        b'<script type="Application/LD+JSON">{"@type": "Organization"}</script>'
+        b'<script type="application/json">{"not": "structured data"}</script>'
+    )
+    data = parse_html(html, 'https://example.com/', 'example.com')
+    assert [block['data']['@type'] for block in data['jsonld']] == ['Person', 'WebSite', 'Organization']
+
 def test_lazy_loaded_images_report_their_own_url():
     # Lazy-loading markup leaves src empty; the image is in data-src or srcset.
     html = (
