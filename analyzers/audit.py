@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from urllib.parse import urljoin, urlsplit
 from crawler.models import CrawlResult, Finding
+from crawler.url_normalizer import normalize_url
 
 SEVERITY_SCORE = {"Critical": 100, "High": 75, "Medium": 50, "Low": 25, "Informational": 5}
 
@@ -12,8 +13,17 @@ def _finding(kind, title, severity, category, page, evidence, why, recommendatio
     key = f"{kind}:{page.url}:{evidence}"
     return Finding(hashlib.sha1(key.encode()).hexdigest()[:16], title, severity, category, page.url, evidence, why, recommendation, confidence, confirmed, score=SEVERITY_SCORE[severity])
 
+def _home_url(target_url: str) -> str:
+    # Page URLs are stored normalized ("https://example.com/"), the target URL
+    # as it was typed ("https://Example.com"), so compare in normalized form.
+    try:
+        return normalize_url(target_url)
+    except ValueError:
+        return target_url
+
 def audit(result: CrawlResult, settings: dict) -> list[Finding]:
     findings = []
+    home_url = _home_url(result.target_url)
     pages = [p for p in result.pages if p.fetched]
     page_by_url = {p.url: p for p in result.pages}
     for source in pages:
@@ -71,13 +81,13 @@ def audit(result: CrawlResult, settings: dict) -> list[Finding]:
                 findings.append(_finding("image-alt", "Image missing alt attribute", "Medium", "Images", page, image.get("url", ""), "The image has no alt attribute.", "Add concise descriptive alt text, or use alt=\"\" when the image is intentionally decorative."))
         if "og:title" not in page.social or "og:description" not in page.social:
             findings.append(_finding("social-metadata", "Incomplete Open Graph metadata", "Low", "Technical SEO", page, "og:title or og:description is missing.", "Social metadata helps control how shared pages are represented.", "Add page-specific Open Graph title and description."))
-        if page.incoming_links == 0 and page.url != result.target_url:
+        if page.incoming_links == 0 and page.url != home_url:
             findings.append(_finding("orphan-candidate", "Orphan page candidate", "Medium", "Links", page, "No incoming internal links were discovered in this crawl.", "Pages without discovered internal links may be harder to reach; incomplete JavaScript rendering can affect this result.", "Add an intentional internal link from a relevant page.", "Medium", False))
         if not page.internal_links:
             findings.append(_finding("no-outgoing-links", "No outgoing internal links", "Low", "Links", page, "No internal links were discovered.", "Internal links help users and crawlers navigate the site.", "Add relevant navigation or contextual links where useful.", "Medium", False))
         if page.response_ms > 3000:
             findings.append(_finding("slow-response", "Slow HTTP response", "Medium", "Performance", page, f"Response time was {page.response_ms} ms.", "Response time is a basic signal, not a full Core Web Vitals or mobile usability measurement.", "Profile server and resource delivery; validate with real-user or Lighthouse measurements.", "High", True))
-        if page.word_count < 80 and page.url not in {result.target_url, urljoin(result.target_url, "/contact")}:
+        if page.word_count < 80 and page.url not in {home_url, urljoin(home_url, "/contact")}:
             findings.append(_finding("thin-content", "Thin-content candidate", "Low", "Content", page, f"Only {page.word_count} visible words remained after boilerplate removal.", "Short utility pages can be valid; this is a review candidate, not an automatic quality judgment.", "Confirm the page serves a distinct user purpose and add useful detail if needed.", "Medium", False))
         if page.in_sitemap and page.status_code and page.status_code >= 400:
             findings.append(_finding("sitemap-error", "Sitemap URL returns an error", "High", "Indexability", page, f"Sitemap-listed URL returned HTTP {page.status_code}.", "Sitemaps should identify canonical, reachable URLs.", "Remove or repair the URL in the sitemap."))
@@ -108,7 +118,7 @@ def audit(result: CrawlResult, settings: dict) -> list[Finding]:
         if link.get("error") or (link.get("status_code") and link["status_code"] >= 400):
             findings.append(_finding("broken-external-link", "Broken external link", "Low", "Links", _page_for_url(result, link.get("source", "")), f"{link.get('url')} returned {link.get('status_code') or link.get('error')}.", "Broken outbound links can reduce trust and create a poor user experience.", "Update or remove the external link.", "High", True))
     brand = settings.get("brand_name", "Dipesh Sapkota").lower()
-    home = next((p for p in pages if p.url == result.target_url), None)
+    home = next((p for p in pages if p.url == home_url), None)
     if home and brand not in (home.title + " " + home.meta_description + " " + " ".join(home.h1)).lower():
         findings.append(_finding("brand-identity", "Homepage identity is not explicit", "Medium", "Personal Brand", home, f"The configured brand name {settings.get('brand_name')!r} was not found in title, description, or H1.", "Clear identity helps visitors and search systems understand who the site represents.", "Use the verified professional name in descriptive homepage metadata or a meaningful H1.", "High", True))
     about = [p for p in pages if "/about" in p.url]
