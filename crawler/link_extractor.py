@@ -1,7 +1,10 @@
 import json
 
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urldefrag
+from urllib.parse import urljoin, urldefrag, urlsplit
+
+def _host(value: str) -> str:
+    return value.lower().rstrip(".")
 
 def parse_html(html: bytes, base_url: str, expected_host: str) -> dict:
     soup = BeautifulSoup(html, "lxml")
@@ -15,11 +18,14 @@ def parse_html(html: bytes, base_url: str, expected_host: str) -> dict:
     robots = (robots_node.get("content") or "").strip() if robots_node else ""
     headings = [{"level": int(node.name[1]), "text": node.get_text(" ", strip=True)} for node in soup.find_all([f"h{i}" for i in range(1, 7)])]
     internal, external = [], []
+    site_host = _host(expected_host)
     for node in soup.find_all("a", href=True):
         href = urljoin(base_url, urldefrag(node["href"])[0])
         if not href.startswith(("http://", "https://")): continue
         item = {"url": href, "anchor": node.get_text(" ", strip=True)}
-        (internal if href.split("/", 3)[2].lower() == expected_host.lower() else external).append(item)
+        # Compare hostnames, not the raw netloc: a port ("example.com:8443")
+        # or userinfo ("user@example.com") does not make a link external.
+        (internal if _host(urlsplit(href).hostname or "") == site_host else external).append(item)
     images = []
     for node in soup.find_all("img"):
         images.append({"url": urljoin(base_url, node.get("src", "")), "alt": node.get("alt"), "width": node.get("width"), "height": node.get("height")})
